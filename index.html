@@ -219,6 +219,46 @@
   .dex-cell-label { font-size:6px; color:#666; margin-top:4px; text-align:center; line-height:1.3; }
   .dex-cell.caught .dex-cell-label { color:#2d2d3a; }
 
+  /* Lock overlay on uncaught dex cells */
+  .dex-sprite-wrap { position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center; }
+  .dex-sprite-wrap img { image-rendering:pixelated; width:48px; height:48px; }
+  .dex-lock-overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.45); border-radius:8px; font-size:20px; color:#fff;
+    pointer-events:none;
+  }
+
+  /* Detail panel within dex modal */
+  #dex-detail {
+    position:absolute; inset:0; z-index:10;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(20,20,35,0.7);
+    border-radius:16px;
+  }
+  #dex-detail.hidden { display:none !important; }
+  .dex-detail-card {
+    background:#fff; border-radius:14px; padding:24px 20px;
+    text-align:center; max-width:240px; width:100%;
+    box-shadow:0 8px 32px rgba(0,0,0,0.3);
+  }
+  .dex-detail-card .dex-detail-sprite { height:120px; display:flex; align-items:center; justify-content:center; }
+  .dex-detail-card .dex-detail-sprite img { image-rendering:pixelated; width:120px !important; height:120px !important; }
+  .dex-detail-name { font-size:12px; color:#2d2d3a; margin:10px 0 6px; line-height:1.5; }
+  .dex-detail-status { font-size:9px; color:#999; margin-top:12px; line-height:1.5; }
+  .dex-detail-status.found { color:#4ade80; }
+  .dex-detail-status.locked { color:#f87171; }
+  .dex-detail-shiny-btn {
+    margin-top:10px; font-family:var(--font); font-size:8px; padding:6px 14px;
+    border-radius:8px; border:2px solid #ffb800; background:#fff7e0; color:#b87a00; cursor:pointer;
+  }
+  .dex-detail-shiny-btn:active { transform:translateY(2px); }
+  .dex-detail-shiny-btn.active { background:#fff0c0; border-color:#ff9d00; color:#8a5e00; }
+  .dex-detail-close {
+    margin-top:10px; font-family:var(--font); font-size:9px; padding:8px 20px;
+    border-radius:8px; border:2px solid #2d2d3a; background:#f0f0f0; color:#2d2d3a; cursor:pointer;
+  }
+  .dex-detail-close:active { transform:translateY(2px); }
+
   /* Responsive tightening for very small phones */
   @media (max-width:360px) {
     .panel { padding:20px 16px; }
@@ -301,6 +341,16 @@
       </div>
       <div class="dex-grid-scroll">
         <div id="dex-grid"></div>
+      </div>
+      <div id="dex-detail" class="hidden">
+        <div class="dex-detail-card">
+          <div class="dex-detail-sprite" id="dex-detail-sprite"></div>
+          <div class="dex-detail-name" id="dex-detail-name"></div>
+          <div id="dex-detail-types"></div>
+          <div class="dex-detail-status" id="dex-detail-status"></div>
+          <button class="dex-detail-shiny-btn" id="dex-detail-shiny">✨ Show shiny</button>
+          <button class="dex-detail-close" id="dex-detail-close">BACK</button>
+        </div>
       </div>
     </div>
   </div>

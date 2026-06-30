@@ -109,6 +109,8 @@ class Game {
     document.getElementById("retry-button").addEventListener("click", () => this.startRun());
     this.ui.dexButton.addEventListener("click", () => this._openDex());
     document.getElementById("dex-close").addEventListener("click", () => this._closeDex());
+    document.getElementById("dex-detail-close").addEventListener("click", () => this._closeDexDetail());
+    document.getElementById("dex-detail-shiny").addEventListener("click", () => this._toggleDexShiny());
     document.getElementById("gameover-dex-button").addEventListener("click", () => this._openDex());
   }
 
@@ -439,6 +441,7 @@ class Game {
   _openDex() {
     const grid = document.getElementById("dex-grid");
     grid.innerHTML = "";
+    document.getElementById("dex-detail").classList.add("hidden");
 
     for (let id = 1; id <= 151; id++) {
       const entry = this.save.dex[id];
@@ -449,18 +452,27 @@ class Game {
       const cell = document.createElement("div");
       cell.className = "dex-cell" + (caught ? " caught" : "") + (isShiny ? " shiny" : "");
 
-      if (caught) {
-        const spriteEl = document.createElement("div");
-        spriteEl.style.cssText = "width:48px;height:48px;display:flex;align-items:center;justify-content:center;";
-        renderDexCellSprite(spriteEl, id, isShiny);
-        cell.appendChild(spriteEl);
-        const label = document.createElement("div");
-        label.className = "dex-cell-label";
-        label.textContent = mon.name;
-        cell.appendChild(label);
-      } else {
-        cell.innerHTML = `<div class="dex-unknown">?</div><div class="dex-cell-label">#${String(id).padStart(3, "0")}</div>`;
+      const spriteWrap = document.createElement("div");
+      spriteWrap.className = "dex-sprite-wrap";
+      renderDexCellSprite(spriteWrap, id, isShiny);
+
+      if (!caught) {
+        const lock = document.createElement("div");
+        lock.className = "dex-lock-overlay";
+        lock.textContent = "🔒";
+        spriteWrap.appendChild(lock);
       }
+
+      cell.appendChild(spriteWrap);
+
+      const label = document.createElement("div");
+      label.className = "dex-cell-label";
+      label.textContent = caught ? mon.name : `#${String(id).padStart(3, "0")}`;
+      cell.appendChild(label);
+
+      cell.style.cursor = "pointer";
+      cell.addEventListener("click", () => this._showDexDetail(id));
+
       grid.appendChild(cell);
     }
 
@@ -471,7 +483,61 @@ class Game {
     this.ui.dexModal.classList.remove("hidden");
   }
 
+  _showDexDetail(id) {
+    this._detailId = id;
+    this._detailShowingShiny = false;
+    this._renderDexDetail();
+    document.getElementById("dex-detail").classList.remove("hidden");
+  }
+
+  _renderDexDetail() {
+    const id = this._detailId;
+    const entry = this.save.dex[id];
+    const caught = entry?.caught;
+    const isShiny = entry?.shiny;
+    const mon = getPokemon(id);
+    const showingShiny = this._detailShowingShiny;
+
+    const spriteContainer = document.getElementById("dex-detail-sprite");
+    renderDexCellSprite(spriteContainer, id, showingShiny);
+
+    document.getElementById("dex-detail-name").textContent = `${mon.name}  #${String(id).padStart(3, "0")}`;
+
+    const typesEl = document.getElementById("dex-detail-types");
+    typesEl.innerHTML = mon.types
+      .map(t => `<span class="type-badge" style="background:${TYPE_COLORS[t]}">${t}</span>`)
+      .join("");
+
+    const statusEl = document.getElementById("dex-detail-status");
+    if (caught) {
+      statusEl.textContent = isShiny ? "✨ Caught! (Shiny)" : "★ Caught!";
+      statusEl.className = "dex-detail-status found";
+    } else {
+      statusEl.textContent = "Not found yet";
+      statusEl.className = "dex-detail-status locked";
+    }
+
+    const shinyBtn = document.getElementById("dex-detail-shiny");
+    if (showingShiny) {
+      shinyBtn.textContent = "✨ Showing shiny";
+      shinyBtn.className = "dex-detail-shiny-btn active";
+    } else {
+      shinyBtn.textContent = "✨ Show shiny";
+      shinyBtn.className = "dex-detail-shiny-btn";
+    }
+  }
+
+  _toggleDexShiny() {
+    this._detailShowingShiny = !this._detailShowingShiny;
+    this._renderDexDetail();
+  }
+
+  _closeDexDetail() {
+    document.getElementById("dex-detail").classList.add("hidden");
+  }
+
   _closeDex() {
+    document.getElementById("dex-detail").classList.add("hidden");
     this.ui.dexModal.classList.add("hidden");
   }
 

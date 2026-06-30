@@ -49,6 +49,10 @@ class Game {
     this._resize();
     window.addEventListener("resize", () => this._resize());
 
+    // Preload player Pidgey sprites on startup
+    loadSpriteImage(16, false);
+    loadSpriteImage(16, true);
+
     requestAnimationFrame((t) => this._loop(t));
 
     this.ui = {
@@ -170,12 +174,15 @@ class Game {
   // ─── Main Loop ───────────────────────────────────────────────────────────
 
   _loop(timestamp) {
-    const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033) || 0;
-    this.lastTime = timestamp;
+    try {
+      const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033) || 0;
+      this.lastTime = timestamp;
 
-    this._update(dt);
-    this._render();
-
+      this._update(dt);
+      this._render();
+    } catch (e) {
+      console.error("[Game] Error in loop:", e);
+    }
     requestAnimationFrame((t) => this._loop(t));
   }
 
@@ -328,35 +335,46 @@ class Game {
     this.inputLocked = false;
 
     this.throwState = {
+      phase: "aiming",
       ringRadius: 1.0,
-      shrinking: true,
       direction: -1,
       speed: 0.85,
-      resolved: false,
+      ballProgress: 0,
     };
 
     document.getElementById("throw-prompt").classList.remove("hidden");
   }
 
   _updateThrow(dt) {
-    if (!this.throwState || this.throwState.resolved) return;
+    if (!this.throwState) return;
     const t = this.throwState;
 
-    t.ringRadius += t.direction * t.speed * dt;
-    if (t.ringRadius <= 0.22) { t.ringRadius = 0.22; t.direction = 1; }
-    if (t.ringRadius >= 1.0) { t.ringRadius = 1.0; t.direction = -1; }
+    if (t.phase === "aiming") {
+      t.ringRadius += t.direction * t.speed * dt;
+      if (t.ringRadius <= 0.22) { t.ringRadius = 0.22; t.direction = 1; }
+      if (t.ringRadius >= 1.0) { t.ringRadius = 1.0; t.direction = -1; }
+    } else if (t.phase === "flying") {
+      t.ballProgress += dt * 2.2;
+      if (t.ballProgress >= 1) {
+        t.ballProgress = 1;
+        this._animateBallThrow(t.catchChance, t.ringSize);
+      }
+    }
   }
 
   _releaseThrow() {
-    if (!this.throwState || this.throwState.resolved) return;
-    this.throwState.resolved = true;
-    document.getElementById("throw-prompt").classList.add("hidden");
+    if (!this.throwState || this.throwState.phase !== "aiming") return;
 
     const ringSize = this.throwState.ringRadius;
     const precisionBonus = (1 - ringSize) * 0.10;
     const catchChance = Math.min(0.90 + precisionBonus, 0.99);
 
-    this._animateBallThrow(catchChance, ringSize);
+    this.throwState.phase = "flying";
+    this.throwState.ballProgress = 0;
+    this.throwState.catchChance = catchChance;
+    this.throwState.ringSize = ringSize;
+
+    document.getElementById("throw-prompt").classList.add("hidden");
   }
 
   _animateBallThrow(catchChance, ringSize) {
@@ -662,44 +680,103 @@ class Game {
     ctx.restore();
   }
 
+  _drawPokeball(ctx, x, y, r) {
+    ctx.save();
+    // Red top half
+    ctx.beginPath();
+    ctx.arc(x, y, r, -Math.PI, 0);
+    ctx.closePath();
+    ctx.fillStyle = "#ee1515";
+    ctx.fill();
+
+    // White bottom half
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI);
+    ctx.closePath();
+    ctx.fillStyle = "#f0f0f0";
+    ctx.fill();
+
+    // Black center band
+    ctx.fillStyle = "#222";
+    ctx.fillRect(x - r, y - r * 0.15, r * 2, r * 0.3);
+
+    // White center button
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = "#eee";
+    ctx.fill();
+    ctx.strokeStyle = "#666";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Outer rim
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   _renderThrowScene(ctx) {
     ctx.fillStyle = "rgba(20, 20, 40, 0.5)";
     ctx.fillRect(0, 0, this.W, this.H);
 
-    // Draw the Pokémon sprite — drawSprite handles async load gracefully,
-    // shows a spinning placeholder until the image arrives then redraws.
     const cx = this.W / 2;
     const cy = this.H * 0.4;
     const bob = Math.sin(performance.now() / 300) * 6;
 
-    ctx.save();
-    ctx.translate(cx, cy + bob);
-    drawSprite(ctx, this.encounter.pokemonId, this.encounter.isShiny, 0, 0, 160, () => {
-      // Image just loaded — nothing to do, next frame will blit it properly
+    renderPokemon(ctx, {
+      dexNumber: this.encounter.pokemonId,
+      shiny: this.encounter.isShiny,
+      x: cx,
+      y: cy + bob,
+      size: 160,
     });
-    ctx.restore();
 
-    if (this.throwState && !this.throwState.resolved) {
+    if (!this.throwState) return;
+
+    if (this.throwState.phase === "aiming") {
       const maxR = 90;
       const minR = 20;
       const r = minR + (maxR - minR) * this.throwState.ringRadius;
 
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 3;
+      // Outer guide ring (dashed)
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 6]);
       ctx.beginPath();
       ctx.arc(cx, cy + 90, minR, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
 
+      // Shrinking ring with glow pulse
+      ctx.save();
+      const pulse = 0.6 + Math.sin(performance.now() / 200) * 0.4;
+      ctx.globalAlpha = pulse;
       ctx.strokeStyle = "#ff4444";
       ctx.lineWidth = 4;
+      ctx.shadowColor = "#ff4444";
+      ctx.shadowBlur = 15;
       ctx.beginPath();
       ctx.arc(cx, cy + 90, r, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.restore();
 
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(cx, cy + 90, 4, 0, Math.PI * 2);
-      ctx.fill();
+      // Pokéball at center of timing ring
+      this._drawPokeball(ctx, cx, cy + 90, 14);
+    } else if (this.throwState.phase === "flying") {
+      const progress = this.throwState.ballProgress;
+      const ease = 1 - Math.pow(1 - progress, 2);
+      const targetX = cx;
+      const targetY = cy + bob;
+      const ballX = this.bird.x + (targetX - this.bird.x) * ease;
+      const ballY = this.bird.y + (targetY - this.bird.y) * ease - Math.sin(progress * Math.PI) * 50;
+      const ballScale = 0.5 + progress * 0.5;
+
+      this._drawPokeball(ctx, ballX, ballY, 14 * ballScale);
     }
   }
 

@@ -36,7 +36,7 @@ function loadSpriteImage(id, isShiny) {
     img.crossOrigin = "anonymous";
 
     img.onload = () => {
-      _imageCache.set(key, Promise.resolve(img));
+      promise._resolved_img = img;
       resolve(img);
     };
 
@@ -224,6 +224,19 @@ function renderDexCellSprite(container, id, isShiny) {
 
   img.src = url;
   container.appendChild(img);
+}
+
+/**
+ * Centralized Pokémon renderer for canvas contexts.
+ * Every Pokémon visual on the canvas should flow through this function.
+ */
+function renderPokemon(ctx, opts) {
+  const { dexNumber, shiny = false, x, y, size = 80, rotation = 0 } = opts || {};
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation) ctx.rotate(rotation);
+  drawSprite(ctx, dexNumber, shiny, 0, 0, size);
+  ctx.restore();
 }
 
 // ─── Canvas helpers (used during the throw minigame overlay) ──────────────

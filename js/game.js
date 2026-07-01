@@ -244,7 +244,7 @@ class Game {
       const progress = getDexProgress(this.save);
       document.getElementById("final-score").textContent = this.score;
       document.getElementById("final-best").textContent = this.save.bestScore;
-      document.getElementById("final-dex").textContent = `${progress.caught} / 151`;
+      document.getElementById("final-dex").textContent = `${progress.caught} / 302`;
       this.inputLocked = false;
     }, 700);
   }
@@ -416,17 +416,20 @@ class Game {
     document.getElementById("pause-button").classList.add("hidden");
     this.save.totalEncounters++;
 
-    // Don't re-encounter already-caught species
-    const caughtIds = new Set(
+    const isShiny = Math.random() < 1 / 7;
+
+    // Separate pools: normal encounter excludes already-caught normals,
+    // shiny encounter excludes already-caught shinies.
+    const excluded = new Set(
       Object.entries(this.save.dex)
-        .filter(([_, e]) => e.caught)
-        .map(([id, _]) => Number(id))
+        .filter(([_, e]) => isShiny ? e.shinyCaught : e.caught)
+        .map(([id]) => Number(id))
     );
 
     const uncaughtLegendary = [];
     const uncaughtNonLegendary = [];
     for (let i = 1; i <= 151; i++) {
-      if (caughtIds.has(i)) continue;
+      if (excluded.has(i)) continue;
       if (LEGENDARY_IDS.has(i)) uncaughtLegendary.push(i);
       else uncaughtNonLegendary.push(i);
     }
@@ -441,8 +444,6 @@ class Game {
       const pool = uncaughtNonLegendary.length > 0 ? uncaughtNonLegendary : uncaughtLegendary;
       pokemonId = pool[Math.floor(Math.random() * pool.length)];
     }
-
-    const isShiny = Math.random() < 1 / 3;
 
     this.encounter = { pokemonId, isShiny };
 
@@ -459,7 +460,7 @@ class Game {
 
     renderSpriteToElement(spriteContainer, mon.id, this.encounter.isShiny, 160);
 
-    nameEl.textContent = `Wild ${mon.name} appeared!`;
+    nameEl.textContent = this.encounter.isShiny ? `✨ Wild shiny ${mon.name} appeared!` : `Wild ${mon.name} appeared!`;
     typesEl.innerHTML = mon.types
       .map(t => `<span class="type-badge" style="background:${TYPE_COLORS[t]}">${t}</span>`)
       .join("");
@@ -557,7 +558,10 @@ class Game {
 
     renderSpriteToElement(spriteContainer, mon.id, this.encounter.isShiny, 140);
 
-    const wasNew = !this.save.dex[mon.id]?.caught;
+    const entry = this.save.dex[mon.id];
+    const wasNew = this.encounter.isShiny
+      ? !entry?.shinyCaught
+      : !entry?.caught;
 
     if (caught) {
       recordCatch(this.save, mon.id, this.encounter.isShiny);
@@ -567,7 +571,7 @@ class Game {
       titleEl.textContent = `Gotcha! ${mon.name} was caught!`;
       titleEl.style.color = "#4ade80";
       subEl.textContent = wasNew
-        ? `${qualityLabel} New Pokédex entry!`
+        ? this.encounter.isShiny ? `${qualityLabel} New shiny Pokédex entry!` : `${qualityLabel} New Pokédex entry!`
         : `${qualityLabel} Already in your Pokédex.`;
 
       modal.classList.remove("result-fail");
@@ -582,7 +586,7 @@ class Game {
     }
 
     const progress = getDexProgress(this.save);
-    document.getElementById("result-dex-progress").textContent = `Pokédex: ${progress.caught} / 151`;
+    document.getElementById("result-dex-progress").textContent = `Pokédex: ${progress.caught} / 302`;
 
     modal.classList.remove("hidden");
 
@@ -605,39 +609,41 @@ class Game {
 
     for (let id = 1; id <= 151; id++) {
       const entry = this.save.dex[id];
-      const caught = entry?.caught;
-      const isShiny = entry?.shiny;
       const mon = getPokemon(id);
 
-      const cell = document.createElement("div");
-      cell.className = "dex-cell" + (caught ? " caught" : "") + (isShiny ? " shiny" : "");
+      for (const isShiny of [false, true]) {
+        const caught = isShiny ? entry?.shinyCaught : entry?.caught;
 
-      const spriteWrap = document.createElement("div");
-      spriteWrap.className = "dex-sprite-wrap";
-      renderDexCellSprite(spriteWrap, id, isShiny);
+        const cell = document.createElement("div");
+        cell.className = "dex-cell" + (caught ? " caught" : "") + (isShiny ? " shiny" : "");
 
-      if (!caught) {
-        const lock = document.createElement("div");
-        lock.className = "dex-lock-overlay";
-        lock.textContent = "🔒";
-        spriteWrap.appendChild(lock);
+        const spriteWrap = document.createElement("div");
+        spriteWrap.className = "dex-sprite-wrap";
+        renderDexCellSprite(spriteWrap, id, isShiny);
+
+        if (!caught) {
+          const lock = document.createElement("div");
+          lock.className = "dex-lock-overlay";
+          lock.textContent = "🔒";
+          spriteWrap.appendChild(lock);
+        }
+
+        cell.appendChild(spriteWrap);
+
+        const label = document.createElement("div");
+        label.className = "dex-cell-label";
+        label.textContent = caught ? mon.name : `#${String(id).padStart(3, "0")}`;
+        cell.appendChild(label);
+
+        cell.style.cursor = "pointer";
+        cell.addEventListener("click", () => this._showDexDetail(id));
+
+        grid.appendChild(cell);
       }
-
-      cell.appendChild(spriteWrap);
-
-      const label = document.createElement("div");
-      label.className = "dex-cell-label";
-      label.textContent = caught ? mon.name : `#${String(id).padStart(3, "0")}`;
-      cell.appendChild(label);
-
-      cell.style.cursor = "pointer";
-      cell.addEventListener("click", () => this._showDexDetail(id));
-
-      grid.appendChild(cell);
     }
 
     const progress = getDexProgress(this.save);
-    document.getElementById("dex-progress-text").textContent = `${progress.caught} / 151 caught`;
+    document.getElementById("dex-progress-text").textContent = `${progress.caught} / 302 caught`;
     document.getElementById("dex-shiny-text").textContent = `✨ ${this.save.shinyCount} shiny catches`;
 
     this.ui.dexModal.classList.remove("hidden");
@@ -653,10 +659,11 @@ class Game {
   _renderDexDetail() {
     const id = this._detailId;
     const entry = this.save.dex[id];
-    const caught = entry?.caught;
-    const isShiny = entry?.shiny;
     const mon = getPokemon(id);
     const showingShiny = this._detailShowingShiny;
+
+    const normCaught = entry?.caught ?? false;
+    const shinyCaught = entry?.shinyCaught ?? false;
 
     const spriteContainer = document.getElementById("dex-detail-sprite");
     renderDexCellSprite(spriteContainer, id, showingShiny);
@@ -669,12 +676,12 @@ class Game {
       .join("");
 
     const statusEl = document.getElementById("dex-detail-status");
-    if (caught) {
-      statusEl.textContent = isShiny ? "✨ Caught! (Shiny)" : "★ Caught!";
-      statusEl.className = "dex-detail-status found";
+    if (showingShiny) {
+      statusEl.textContent = shinyCaught ? "✨ Shiny caught!" : "✨ Shiny not found yet";
+      statusEl.className = shinyCaught ? "dex-detail-status found" : "dex-detail-status locked";
     } else {
-      statusEl.textContent = "Not found yet";
-      statusEl.className = "dex-detail-status locked";
+      statusEl.textContent = normCaught ? "★ Normal caught!" : "Not found yet";
+      statusEl.className = normCaught ? "dex-detail-status found" : "dex-detail-status locked";
     }
 
     const shinyBtn = document.getElementById("dex-detail-shiny");

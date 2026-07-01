@@ -1,6 +1,6 @@
 /**
  * Game — the core engine. Single canvas, single update/render loop.
- * States: "menu" | "playing" | "encounter" | "throwing" | "result" | "gameover"
+ * States: "menu" | "playing" | "countdown" | "paused" | "encounter" | "throwing" | "animating" | "result" | "gameover"
  */
 
 class Game {
@@ -40,14 +40,21 @@ class Game {
     this.floatTexts = [];
 
     this.bgOffset = 0;
-    this.cloudOffset = 0;
+
+    this.clouds = [];
+    this.scoreFlash = 0;
 
     this.inputLocked = false;
     this._bindInput();
 
     this.lastTime = 0;
     this._resize();
-    window.addEventListener("resize", () => this._resize());
+    this._initClouds();
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => this._resize(), 150);
+    });
 
     // Preload player Pidgey sprites on startup
     loadSpriteImage(16, false);
@@ -77,6 +84,18 @@ class Game {
     return arr;
   }
 
+  _initClouds() {
+    this.clouds = [];
+    for (let i = 0; i < 7; i++) {
+      this.clouds.push({
+        x: Math.random() * this.W * 1.5,
+        y: 40 + Math.random() * (this.H * 0.35),
+        speed: 25 + Math.random() * 25,
+        size: 30 + Math.random() * 30,
+      });
+    }
+  }
+
   _resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.W = window.innerWidth;
@@ -101,6 +120,11 @@ class Game {
     this.canvas.addEventListener("pointerdown", flap);
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" || e.code === "ArrowUp") flap(e);
+      if (e.code === "Escape" || e.code === "KeyP") {
+        e.preventDefault();
+        if (this.state === "playing") this._togglePause();
+        else if (this.state === "paused") this._togglePause();
+      }
     });
   }
 
@@ -112,6 +136,54 @@ class Game {
     document.getElementById("dex-detail-close").addEventListener("click", () => this._closeDexDetail());
     document.getElementById("dex-detail-shiny").addEventListener("click", () => this._toggleDexShiny());
     document.getElementById("gameover-dex-button").addEventListener("click", () => this._openDex());
+    document.getElementById("share-button").addEventListener("click", () => this._shareScore());
+    document.getElementById("pause-button").addEventListener("click", () => this._togglePause());
+    document.getElementById("resume-button").addEventListener("click", () => this._togglePause());
+    document.getElementById("quit-button").addEventListener("click", () => this._quitToMenu());
+  }
+
+  _shareScore() {
+    const progress = getDexProgress(this.save);
+    const text = `I caught ${progress.caught}/151 Pokémon and scored ${this.score} on Flappy Pidgey! Can you beat me? 🐦✨ https://flappy-pidgey.netlify.app`;
+
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("share-button");
+        const orig = btn.textContent;
+        btn.textContent = "COPIED! ✓";
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      }).catch(() => {});
+    }
+  }
+
+  _togglePause() {
+    if (this.state === "playing") {
+      this.state = "paused";
+      this.inputLocked = true;
+      document.getElementById("pause-button").classList.remove("hidden");
+      document.getElementById("pause-screen").classList.remove("hidden");
+    } else if (this.state === "paused") {
+      document.getElementById("pause-screen").classList.add("hidden");
+      this._showCountdown(() => { this.state = "playing"; this.inputLocked = false; document.getElementById("pause-button").classList.remove("hidden"); });
+    }
+  }
+
+  _quitToMenu() {
+    document.getElementById("pause-screen").classList.add("hidden");
+    this.ui.hud.classList.add("hidden");
+    this.ui.menu.classList.remove("hidden");
+    this.state = "menu";
+    this.inputLocked = false;
+    this.pipes = [];
+    this.particles = [];
+    this.floatTexts = [];
+    this.score = 0;
+    this.bird.x = this.W * 0.3;
+    this.bird.y = this.H * 0.45;
+    this.bird.vy = 0;
+    this.bird.rot = 0;
   }
 
   _handleTap() {
@@ -139,6 +211,8 @@ class Game {
     this.nextThresholdIdx = 0;
     this.particles = [];
     this.floatTexts = [];
+    this.scoreFlash = 0;
+    this._initClouds();
 
     this.bird.x = this.W * 0.3;
     this.bird.y = this.H * 0.45;
@@ -148,13 +222,15 @@ class Game {
     this.save.totalRuns++;
     writeSave(this.save);
 
-    this.state = "playing";
     this._updateHUD();
+    document.getElementById("pause-button").classList.remove("hidden");
+    this._showCountdown(() => { this.state = "playing"; });
   }
 
   gameOver() {
     this.state = "gameover";
     this.inputLocked = true;
+    document.getElementById("pause-button").classList.add("hidden");
 
     if (this.score > this.save.bestScore) {
       this.save.bestScore = this.score;
@@ -177,9 +253,16 @@ class Game {
 
   _loop(timestamp) {
     try {
-      const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033) || 0;
+      const raw = (timestamp - this.lastTime) / 1000;
       this.lastTime = timestamp;
 
+      if (raw > 0.1) {
+        this._render();
+        requestAnimationFrame((t) => this._loop(t));
+        return;
+      }
+
+      const dt = Math.min(raw, 0.033) || 0;
       this._update(dt);
       this._render();
     } catch (e) {
@@ -189,13 +272,39 @@ class Game {
   }
 
   _update(dt) {
-    this.bgOffset = (this.bgOffset + dt * 20) % this.W;
-    this.cloudOffset = (this.cloudOffset + dt * 8) % this.W;
+    if (this.state !== "countdown" && this.state !== "paused") {
+      this.bgOffset = (this.bgOffset + dt * 20) % this.W;
+      for (const cloud of this.clouds) {
+        cloud.x -= cloud.speed * dt;
+        if (cloud.x + cloud.size * 2.5 < 0) {
+          cloud.x = this.W + cloud.size * 2;
+          cloud.y = 40 + Math.random() * (this.H * 0.35);
+          cloud.speed = 25 + Math.random() * 25;
+          cloud.size = 30 + Math.random() * 30;
+        }
+      }
+    }
+
+    if (this.scoreFlash > 0) {
+      this.scoreFlash -= dt;
+      const scoreEl = document.getElementById("score-display");
+      if (this.scoreFlash > 0.15) {
+        scoreEl.style.color = "#ffdb58";
+      } else {
+        scoreEl.style.color = "#fff";
+      }
+    } else {
+      document.getElementById("score-display").style.color = "#fff";
+    }
 
     if (this.state === "playing") {
       this._updatePlaying(dt);
     } else if (this.state === "throwing") {
       this._updateThrow(dt);
+    } else if (this.state === "animating") {
+      this._updateCaptureAnim(dt);
+    } else if (this.state === "countdown") {
+      this._updateCountdown(dt);
     } else if (this.state === "menu") {
       this.bird.y = this.H * 0.45 + Math.sin(performance.now() / 400) * 10;
     }
@@ -278,6 +387,12 @@ class Game {
     this.pipeSpeed = Math.min(this.baseSpeed + this.score * 2.2, 340);
     this.pipeInterval = Math.max(this.baseInterval - this.score * 0.01, 0.95);
 
+    // Milestone particles: 25, 50, 100, 150, then every 100 after 150
+    if (this.score === 25 || this.score === 50 || this.score === 100 || this.score === 150 || (this.score > 150 && (this.score - 150) % 100 === 0)) {
+      this._spawnMilestoneParticles();
+      this.scoreFlash = 0.3;
+    }
+
     if (
       this.nextThresholdIdx < this.thresholds.length &&
       this.score >= this.thresholds[this.nextThresholdIdx]
@@ -298,6 +413,7 @@ class Game {
   _triggerEncounter() {
     this.state = "encounter";
     this.inputLocked = true;
+    document.getElementById("pause-button").classList.add("hidden");
     this.save.totalEncounters++;
 
     const pokemonId = getRandomPokemonId();
@@ -356,11 +472,25 @@ class Game {
       if (t.ringRadius <= 0.22) { t.ringRadius = 0.22; t.direction = 1; }
       if (t.ringRadius >= 1.0) { t.ringRadius = 1.0; t.direction = -1; }
     } else if (t.phase === "flying") {
-      t.ballProgress += dt * 2.2;
+      t.ballProgress += dt * 2.5;
       if (t.ballProgress >= 1) {
         t.ballProgress = 1;
         this._animateBallThrow(t.catchChance, t.ringSize);
       }
+    }
+  }
+
+  _updateCaptureAnim(dt) {
+    const t = this.throwState;
+    if (!t || t.phase !== "capturing") return;
+    t.captureTimer += dt;
+
+    if (t.captureTimer >= 0.2 && t.captureTimer < 0.44) {
+      const elapsed = t.captureTimer - 0.2;
+      const shakePhase = (elapsed % 0.08) / 0.08;
+      t.shakeOffset = Math.sin(shakePhase * Math.PI * 2) * 12;
+    } else if (t.captureTimer >= 0.44) {
+      this._showResultUI(t.resultCaught, t.resultQuality);
     }
   }
 
@@ -380,14 +510,20 @@ class Game {
   }
 
   _animateBallThrow(catchChance, ringSize) {
-    this.state = "result";
+    this.state = "animating";
+    this.inputLocked = true;
     const caught = Math.random() < catchChance;
     const quality = ringSize < 0.35 ? "excellent" : ringSize < 0.6 ? "great" : "good";
 
-    this._showResultUI(caught, quality);
+    this.throwState.phase = "capturing";
+    this.throwState.captureTimer = 0;
+    this.throwState.shakeOffset = 0;
+    this.throwState.resultCaught = caught;
+    this.throwState.resultQuality = quality;
   }
 
   _showResultUI(caught, quality) {
+    this.state = "result";
     const mon = getPokemon(this.encounter.pokemonId);
     const modal = document.getElementById("result-modal");
     const titleEl = document.getElementById("result-title");
@@ -432,8 +568,7 @@ class Game {
     document.getElementById("result-modal").classList.add("hidden");
     this.encounter = null;
     this.throwState = null;
-    this.state = "playing";
-    this.inputLocked = false;
+    this._showCountdown(() => { this.state = "playing"; this.inputLocked = false; document.getElementById("pause-button").classList.remove("hidden"); });
   }
 
   // ─── Pokédex Modal ───────────────────────────────────────────────────────
@@ -567,6 +702,25 @@ class Game {
     }
   }
 
+  _spawnMilestoneParticles() {
+    const colors = ["#ffcc00", "#ff4444", "#4ade80"];
+    const scoreEl = document.getElementById("score-display");
+    const rect = scoreEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < 20; i++) {
+      const angle = (Math.PI * 2 / 20) * i + Math.random() * 0.3;
+      const speed = 80 + Math.random() * 120;
+      this.particles.push({
+        x: centerX, y: centerY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.6, maxLife: 0.6, size: 3 + Math.random() * 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+  }
+
   _spawnFloatText(x, y, text, color) {
     this.floatTexts.push({ x, y, text, color, life: 0.8, maxLife: 0.8 });
   }
@@ -591,8 +745,56 @@ class Game {
     }
   }
 
+  // ─── Countdown ───────────────────────────────────────────────────────────
+
+  _showCountdown(onComplete) {
+    this.state = "countdown";
+    this.inputLocked = true;
+    this.countdownPhase = 0;
+    this.countdownTimer = 0;
+    this.countdownScale = 1.4;
+    this._countdownCallback = onComplete;
+  }
+
+  _updateCountdown(dt) {
+    const durations = [0.8, 0.8, 0.8, 0.5];
+    this.countdownTimer += dt;
+    const dur = durations[this.countdownPhase];
+    const t = Math.min(this.countdownTimer / dur, 1);
+    this.countdownScale = 1.4 - t * 0.4;
+
+    if (t >= 1) {
+      this.countdownPhase++;
+      this.countdownTimer = 0;
+      this.countdownScale = 1.4;
+      if (this.countdownPhase >= 4) {
+        const cb = this._countdownCallback;
+        this._countdownCallback = null;
+        this.inputLocked = false;
+        if (cb) cb();
+      }
+    }
+  }
+
+  _renderCountdown(ctx) {
+    const labels = ["3", "2", "1", "GO!"];
+    const text = labels[this.countdownPhase];
+    const color = this.countdownPhase === 3 ? "#4ade80" : "#fff";
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${Math.round(120 * this.countdownScale)}px 'Press Start 2P', monospace`;
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = color;
+    ctx.fillText(text, this.W / 2, this.H / 2);
+    ctx.restore();
+  }
+
   _updateHUD() {
-    document.getElementById("score-display").textContent = this.score;
+    const scoreEl = document.getElementById("score-display");
+    scoreEl.textContent = this.score;
     const progress = getDexProgress(this.save);
     document.getElementById("hud-dex-progress").textContent = `${progress.caught}/151`;
   }
@@ -606,20 +808,24 @@ class Game {
     this._renderSky(ctx);
     this._renderClouds(ctx);
 
-    if (this.state === "playing" || this.state === "menu") {
+    if (this.state === "playing" || this.state === "menu" || this.state === "countdown" || this.state === "paused") {
       this._renderPipes(ctx);
     }
 
     this._renderGround(ctx);
     this._renderParticles(ctx);
 
-    if (this.state !== "throwing") {
-      this._renderBird(ctx);
-    } else {
+    if (this.state === "throwing" || this.state === "animating") {
       this._renderThrowScene(ctx);
+    } else {
+      this._renderBird(ctx);
     }
 
     this._renderFloatTexts(ctx);
+
+    if (this.state === "countdown") {
+      this._renderCountdown(ctx);
+    }
   }
 
   _renderSky(ctx) {
@@ -632,14 +838,9 @@ class Game {
   }
 
   _renderClouds(ctx) {
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    const cloudY = [80, 160, 220];
-    for (let row = 0; row < 3; row++) {
-      const offset = (this.cloudOffset * (0.5 + row * 0.3)) % (this.W + 200);
-      for (let i = 0; i < 3; i++) {
-        const x = ((i * 280 - offset) % (this.W + 200)) - 100;
-        this._drawCloud(ctx, x, cloudY[row], 30 + row * 10);
-      }
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    for (const cloud of this.clouds) {
+      this._drawCloud(ctx, cloud.x, cloud.y, cloud.size);
     }
   }
 
@@ -701,46 +902,99 @@ class Game {
     ctx.translate(this.bird.x, this.bird.y);
     ctx.rotate((this.bird.rot * Math.PI) / 180);
 
-    const flap = this.bird.flapAnim > 0 ? Math.sin(performance.now() / 40) * 6 : Math.sin(performance.now() / 180) * 3;
+    // Wing angle: +25° on flap, -10° droop at rest, interpolated
+    const wingAngle = this.bird.flapAnim > 0
+      ? -10 + 35 * this.bird.flapAnim
+      : -10;
 
-    ctx.fillStyle = "#d4a36a";
+    // Tail — 2 short feather strokes pointing backward-down
+    ctx.strokeStyle = "#5C4008";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.ellipse(0, 0, 15, 12, 0, 0, Math.PI * 2);
+    ctx.moveTo(-14, 2);
+    ctx.lineTo(-21, 7);
+    ctx.moveTo(-12, 0);
+    ctx.lineTo(-19, 4);
+    ctx.stroke();
+
+    // Body — horizontal oval, wider than tall (ratio ~1.6:1)
+    ctx.fillStyle = "#8B6B14";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 11, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#a8763f";
+    // Belly — cream, front-bottom offset
+    ctx.fillStyle = "#F0E0B0";
     ctx.beginPath();
-    ctx.ellipse(-4, 2 + flap, 10, 7, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(6, 5, 9, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#f5e6c8";
+    // Wing — swept-back teardrop, drawn on top, rotated around shoulder
+    ctx.save();
+    ctx.translate(5, -2);
+    ctx.rotate((wingAngle * Math.PI) / 180);
+    ctx.fillStyle = "#5C4008";
     ctx.beginPath();
-    ctx.ellipse(2, 4, 8, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#a8763f";
-    ctx.beginPath();
-    ctx.moveTo(8, -10);
-    ctx.lineTo(16, -18);
-    ctx.lineTo(10, -6);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-12, -2);
+    ctx.lineTo(-17, 3);
+    ctx.lineTo(-10, 6);
     ctx.closePath();
     ctx.fill();
-
-    ctx.fillStyle = "#e8a73f";
+    // Feather detail strokes on trailing edge
+    ctx.strokeStyle = "#3D2D05";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(13, -2);
-    ctx.lineTo(22, 1);
-    ctx.lineTo(13, 4);
-    ctx.closePath();
+    ctx.moveTo(-10, 3);
+    ctx.lineTo(-15, 3);
+    ctx.moveTo(-8, 4);
+    ctx.lineTo(-13, 4);
+    ctx.moveTo(-6, 3);
+    ctx.lineTo(-10, 3);
+    ctx.stroke();
+    ctx.restore();
+
+    // Head — smaller circle at front-top (~40% of body width)
+    ctx.fillStyle = "#8B6B14";
+    ctx.beginPath();
+    ctx.arc(13, -6, 7, 0, Math.PI * 2);
     ctx.fill();
 
+    // Crest — 3 upward strokes from top of head
+    ctx.strokeStyle = "#5C4008";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(10, -12);
+    ctx.lineTo(9, -18);
+    ctx.moveTo(12, -12);
+    ctx.lineTo(12, -19);
+    ctx.moveTo(14, -12);
+    ctx.lineTo(15, -17);
+    ctx.stroke();
+
+    // Eye — white circle, dark iris, highlight dot
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(9, -4, 3.5, 0, Math.PI * 2);
+    ctx.arc(15, -7, 3.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#1a1a1a";
+    ctx.fillStyle = "#3B2A0A";
     ctx.beginPath();
-    ctx.arc(10, -4, 2, 0, Math.PI * 2);
+    ctx.arc(16, -7, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(16.5, -8, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Beak — short forward-pointing triangle
+    ctx.fillStyle = "#D4882A";
+    ctx.beginPath();
+    ctx.moveTo(19, -5);
+    ctx.lineTo(24, -4);
+    ctx.lineTo(19, -3);
+    ctx.closePath();
     ctx.fill();
 
     ctx.restore();
@@ -789,36 +1043,69 @@ class Game {
     ctx.fillRect(0, 0, this.W, this.H);
 
     const cx = this.W / 2;
-    const cy = this.H * 0.4;
-    const bob = Math.sin(performance.now() / 300) * 6;
+    const pokemonY = this.H * 0.28 + Math.sin(performance.now() / 300) * 6;
+    const targetY = this.H * 0.68;
 
-    renderPokemon(ctx, {
-      dexNumber: this.encounter.pokemonId,
-      shiny: this.encounter.isShiny,
-      x: cx,
-      y: cy + bob,
-      size: 160,
-    });
+    const t = this.throwState;
 
-    if (!this.throwState) return;
+    // Dashed connecting line between Pokémon and target
+    ctx.save();
+    ctx.setLineDash([6, 8]);
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, pokemonY + 80);
+    ctx.lineTo(cx, targetY - 40);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
 
-    if (this.throwState.phase === "aiming") {
+    // Draw Pokémon (hidden during shake phase of capture)
+    const showPokemon = !t || t.phase !== "capturing" || t.captureTimer < 0.2;
+    if (showPokemon) {
+      if (t && t.phase === "capturing" && t.captureTimer < 0.2) {
+        const progress = t.captureTimer / 0.2;
+        const easeShrink = 1 - Math.pow(1 - progress, 3);
+        const size = Math.max(160 * (1 - easeShrink * 0.85), 16);
+        const flash = Math.floor(progress * 12) % 2 === 0;
+        ctx.save();
+        ctx.globalAlpha = flash ? 0.3 : Math.max(1 - easeShrink, 0);
+        renderPokemon(ctx, {
+          dexNumber: this.encounter.pokemonId,
+          shiny: this.encounter.isShiny,
+          x: cx,
+          y: pokemonY,
+          size,
+        });
+        ctx.restore();
+      } else {
+        renderPokemon(ctx, {
+          dexNumber: this.encounter.pokemonId,
+          shiny: this.encounter.isShiny,
+          x: cx,
+          y: pokemonY,
+          size: 160,
+        });
+      }
+    }
+
+    if (!t) return;
+
+    if (t.phase === "aiming") {
       const maxR = 90;
       const minR = 20;
-      const r = minR + (maxR - minR) * this.throwState.ringRadius;
+      const r = minR + (maxR - minR) * t.ringRadius;
 
-      // Outer guide ring (dashed)
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.2)";
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 6]);
       ctx.beginPath();
-      ctx.arc(cx, cy + 90, minR, 0, Math.PI * 2);
+      ctx.arc(cx, targetY, minR, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
 
-      // Shrinking ring with glow pulse
       ctx.save();
       const pulse = 0.6 + Math.sin(performance.now() / 200) * 0.4;
       ctx.globalAlpha = pulse;
@@ -827,22 +1114,29 @@ class Game {
       ctx.shadowColor = "#ff4444";
       ctx.shadowBlur = 15;
       ctx.beginPath();
-      ctx.arc(cx, cy + 90, r, 0, Math.PI * 2);
+      ctx.arc(cx, targetY, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
 
-      // Pokéball at center of timing ring
-      this._drawPokeball(ctx, cx, cy + 90, 14);
-    } else if (this.throwState.phase === "flying") {
-      const progress = this.throwState.ballProgress;
+      this._drawPokeball(ctx, cx, targetY, 14);
+    } else if (t.phase === "flying") {
+      const progress = t.ballProgress;
       const ease = 1 - Math.pow(1 - progress, 2);
-      const targetX = cx;
-      const targetY = cy + bob;
-      const ballX = this.bird.x + (targetX - this.bird.x) * ease;
-      const ballY = this.bird.y + (targetY - this.bird.y) * ease - Math.sin(progress * Math.PI) * 50;
+      const startX = this.W / 2;
+      const startY = this.H;
+      const ballX = startX + (cx - startX) * ease;
+      const ballY = startY + (pokemonY - startY) * ease - Math.sin(progress * Math.PI) * 80;
       const ballScale = 0.5 + progress * 0.5;
 
       this._drawPokeball(ctx, ballX, ballY, 14 * ballScale);
+    } else if (t.phase === "capturing") {
+      if (t.captureTimer < 0.2) {
+        this._drawPokeball(ctx, cx, pokemonY, 12);
+      } else if (t.captureTimer < 0.44) {
+        this._drawPokeball(ctx, cx + t.shakeOffset, pokemonY + 10, 12);
+      } else {
+        this._drawPokeball(ctx, cx, pokemonY + 10, 12);
+      }
     }
   }
 

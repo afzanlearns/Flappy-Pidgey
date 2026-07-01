@@ -19,16 +19,14 @@
   .hidden { display:none !important; }
 
   #watermark {
-    position:fixed; right:10px; bottom:5px;
+    position:fixed; left:50%; bottom:5px;
+    transform:translateX(-50%);
     font:11px/1 Arial,sans-serif;
     color:#fff; opacity:0.55;
     letter-spacing:1px;
     pointer-events:none;
     z-index:40;
     text-shadow:0 1px 3px rgba(0,0,0,0.5);
-  }
-  @media (max-width:640px) {
-    #watermark { right:auto; left:10px; }
   }
 
   /* ─── Shared overlay panel styling ─────────────────────────────────── */

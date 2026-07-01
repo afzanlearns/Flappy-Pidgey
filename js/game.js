@@ -582,6 +582,7 @@ class Game {
     if (caught) {
       recordCatch(this.save, mon.id, this.encounter.isShiny);
       writeSave(this.save);
+      this._updateHUD();
 
       const qualityLabel = { excellent: "Excellent throw!", great: "Great throw!", good: "Nice throw!" }[quality];
       titleEl.textContent = `Gotcha! ${mon.name} was caught!`;
@@ -830,7 +831,7 @@ class Game {
     const scoreEl = document.getElementById("score-display");
     scoreEl.textContent = this.score;
     const progress = getDexProgress(this.save);
-    document.getElementById("hud-dex-progress").textContent = `${progress.caught}/151`;
+    document.getElementById("hud-dex-progress").textContent = `${progress.caught}/302`;
   }
 
   // ─── Rendering ───────────────────────────────────────────────────────────

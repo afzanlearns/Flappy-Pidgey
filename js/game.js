@@ -143,7 +143,7 @@ class Game {
 
   _shareScore() {
     const progress = getDexProgress(this.save);
-    const text = `I caught ${progress.caught}/151 Pokémon and scored ${this.score} on Flappy Pidgey! Can you beat me? 🐦✨ https://flappy-pidgey.netlify.app`;
+    const text = `I caught ${progress.caught}/302 Pokémon and scored ${this.score} on Flappy Pidgey! Can you beat me? 🐦✨ https://flappy-pidgey.vercel.app/`;
 
     if (navigator.share) {
       navigator.share({ text }).catch(() => {});

@@ -416,8 +416,33 @@ class Game {
     document.getElementById("pause-button").classList.add("hidden");
     this.save.totalEncounters++;
 
-    const pokemonId = getRandomPokemonId();
-    const isShiny = Math.random() < 1 / 20;
+    // Don't re-encounter already-caught species
+    const caughtIds = new Set(
+      Object.entries(this.save.dex)
+        .filter(([_, e]) => e.caught)
+        .map(([id, _]) => Number(id))
+    );
+
+    const uncaughtLegendary = [];
+    const uncaughtNonLegendary = [];
+    for (let i = 1; i <= 151; i++) {
+      if (caughtIds.has(i)) continue;
+      if (LEGENDARY_IDS.has(i)) uncaughtLegendary.push(i);
+      else uncaughtNonLegendary.push(i);
+    }
+
+    let pokemonId;
+    const totalUncaught = uncaughtLegendary.length + uncaughtNonLegendary.length;
+    if (totalUncaught === 0) {
+      pokemonId = getRandomPokemonId();
+    } else if (Math.random() < 0.03 && uncaughtLegendary.length > 0) {
+      pokemonId = uncaughtLegendary[Math.floor(Math.random() * uncaughtLegendary.length)];
+    } else {
+      const pool = uncaughtNonLegendary.length > 0 ? uncaughtNonLegendary : uncaughtLegendary;
+      pokemonId = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    const isShiny = Math.random() < 1 / 3;
 
     this.encounter = { pokemonId, isShiny };
 

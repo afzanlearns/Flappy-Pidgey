@@ -134,7 +134,6 @@ class Game {
     this.ui.dexButton.addEventListener("click", () => this._openDex());
     document.getElementById("dex-close").addEventListener("click", () => this._closeDex());
     document.getElementById("dex-detail-close").addEventListener("click", () => this._closeDexDetail());
-    document.getElementById("dex-detail-shiny").addEventListener("click", () => this._toggleDexShiny());
     document.getElementById("gameover-dex-button").addEventListener("click", () => this._openDex());
     document.getElementById("share-button").addEventListener("click", () => this._shareScore());
     document.getElementById("pause-button").addEventListener("click", () => this._togglePause());
@@ -447,7 +446,24 @@ class Game {
 
     this.encounter = { pokemonId, isShiny };
 
-    this._showEncounterUI();
+    if (isShiny) {
+      this._showShinyReveal();
+    } else {
+      this._showEncounterUI();
+    }
+  }
+
+  _showShinyReveal() {
+    const mon = getPokemon(this.encounter.pokemonId);
+    const card = document.getElementById("shiny-reveal");
+    document.getElementById("shiny-reveal-sprite").innerHTML = "";
+    renderSpriteToElement(document.getElementById("shiny-reveal-sprite"), mon.id, true, 120);
+    document.getElementById("shiny-reveal-name").textContent = mon.name;
+    card.classList.remove("hidden");
+    document.getElementById("shiny-reveal-encounter").onclick = () => {
+      card.classList.add("hidden");
+      this._showEncounterUI();
+    };
   }
 
   _showEncounterUI() {
@@ -636,7 +652,7 @@ class Game {
         cell.appendChild(label);
 
         cell.style.cursor = "pointer";
-        cell.addEventListener("click", () => this._showDexDetail(id));
+        cell.addEventListener("click", () => this._showDexDetail(id, isShiny));
 
         grid.appendChild(cell);
       }
@@ -649,9 +665,9 @@ class Game {
     this.ui.dexModal.classList.remove("hidden");
   }
 
-  _showDexDetail(id) {
+  _showDexDetail(id, isShiny = false) {
     this._detailId = id;
-    this._detailShowingShiny = false;
+    this._detailShowingShiny = isShiny;
     this._renderDexDetail();
     document.getElementById("dex-detail").classList.remove("hidden");
   }
@@ -683,20 +699,6 @@ class Game {
       statusEl.textContent = normCaught ? "★ Normal caught!" : "Not found yet";
       statusEl.className = normCaught ? "dex-detail-status found" : "dex-detail-status locked";
     }
-
-    const shinyBtn = document.getElementById("dex-detail-shiny");
-    if (showingShiny) {
-      shinyBtn.textContent = "✨ Showing shiny";
-      shinyBtn.className = "dex-detail-shiny-btn active";
-    } else {
-      shinyBtn.textContent = "✨ Show shiny";
-      shinyBtn.className = "dex-detail-shiny-btn";
-    }
-  }
-
-  _toggleDexShiny() {
-    this._detailShowingShiny = !this._detailShowingShiny;
-    this._renderDexDetail();
   }
 
   _closeDexDetail() {

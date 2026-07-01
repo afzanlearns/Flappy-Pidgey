@@ -270,6 +270,52 @@
   }
   .dex-detail-close:active { transform:translateY(2px); }
 
+  /* ─── Shiny Reveal Modal ───────────────────────────────────────────── */
+  #shiny-reveal-card {
+    background:linear-gradient(160deg, #1a1a2e, #16213e);
+    border:2px solid #ffd700;
+    border-radius:16px;
+    padding:32px 28px 24px;
+    text-align:center;
+    max-width:340px;
+    width:90%;
+    box-shadow:0 0 40px rgba(255,215,0,0.3), inset 0 0 30px rgba(255,215,0,0.08);
+    animation:shinyRevealIn 0.5s ease-out;
+  }
+  @keyframes shinyRevealIn {
+    from { transform:scale(0.7); opacity:0; }
+    to   { transform:scale(1);   opacity:1; }
+  }
+  #shiny-reveal-sparkle {
+    font-size:48px;
+    animation:sparklePulse 0.8s ease-in-out infinite alternate;
+  }
+  @keyframes sparklePulse {
+    from { text-shadow:0 0 8px #ffd700, 0 0 16px #ffb800; transform:scale(1); }
+    to   { text-shadow:0 0 16px #ffd700, 0 0 32px #ff8c00; transform:scale(1.15); }
+  }
+  #shiny-reveal-title {
+    font-size:11px; color:#ffd700; margin:8px 0; line-height:1.6;
+    text-shadow:0 0 10px rgba(255,215,0,0.4);
+  }
+  #shiny-reveal-sprite {
+    height:120px; display:flex; align-items:center; justify-content:center; margin:12px 0;
+  }
+  #shiny-reveal-sprite img {
+    image-rendering:pixelated; width:120px; height:120px;
+    animation:bobIdle 1.6s ease-in-out infinite;
+  }
+  #shiny-reveal-name {
+    font-size:14px; color:#fff; letter-spacing:1px;
+  }
+  #shiny-reveal-encounter {
+    background:linear-gradient(135deg, #ffd700, #ffb800);
+    color:#1a1a2e; border:none; font-family:var(--font); font-size:11px;
+    padding:14px 36px; border-radius:12px; cursor:pointer;
+    box-shadow:0 0 20px rgba(255,215,0,0.4);
+  }
+  #shiny-reveal-encounter:active { transform:translateY(2px); }
+
   /* Responsive tightening for very small phones */
   @media (max-width:360px) {
     .panel { padding:20px 16px; }
@@ -329,6 +375,17 @@
     </div>
   </div>
 
+  <!-- ─── Shiny Reveal Modal ─────────────────────────────────────────── -->
+  <div id="shiny-reveal" class="overlay hidden" style="background:rgba(0,0,0,0.7);">
+    <div id="shiny-reveal-card">
+      <div id="shiny-reveal-sparkle">✦</div>
+      <div id="shiny-reveal-title">✨ A wild shiny Pokémon appeared! ✨</div>
+      <div id="shiny-reveal-sprite"></div>
+      <div id="shiny-reveal-name"></div>
+      <button id="shiny-reveal-encounter" class="big-btn" style="margin-top:16px;">ENCOUNTER ⚡</button>
+    </div>
+  </div>
+
   <!-- ─── Game Over Screen ────────────────────────────────────────────── -->
   <div id="gameover-screen" class="overlay hidden">
     <div class="panel">
@@ -371,7 +428,6 @@
           <div class="dex-detail-name" id="dex-detail-name"></div>
           <div id="dex-detail-types"></div>
           <div class="dex-detail-status" id="dex-detail-status"></div>
-          <button class="dex-detail-shiny-btn" id="dex-detail-shiny">✨ Show shiny</button>
           <button class="dex-detail-close" id="dex-detail-close">BACK</button>
         </div>
       </div>

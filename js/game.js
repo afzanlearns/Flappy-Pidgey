@@ -937,100 +937,110 @@ class Game {
     ctx.translate(this.bird.x, this.bird.y);
     ctx.rotate((this.bird.rot * Math.PI) / 180);
 
-    // Wing angle: +25° on flap, -10° droop at rest, interpolated
-    const wingAngle = this.bird.flapAnim > 0
-      ? -10 + 35 * this.bird.flapAnim
-      : -10;
+    // Wing flap angle: rises sharply on tap, droops gently on fall
+    const flapAngle = this.bird.flapAnim > 0
+      ? -0.55 * this.bird.flapAnim                          // flapping up
+      : 0.18 + Math.sin(performance.now() / 320) * 0.06;   // idle glide drift
 
-    // Tail — 2 short feather strokes pointing backward-down
-    ctx.strokeStyle = "#5C4008";
-    ctx.lineWidth = 2;
+    // ── TAIL (drawn first, behind everything) ──────────────────────────
+    // Three feather strokes fanning out behind the body
+    ctx.strokeStyle = "#5C3D0A";
+    ctx.lineWidth = 2.2;
     ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(-14, 2);
-    ctx.lineTo(-21, 7);
-    ctx.moveTo(-12, 0);
-    ctx.lineTo(-19, 4);
-    ctx.stroke();
+    [[-14, 3, -24, -2], [-14, 5, -25, 7], [-14, 7, -23, 14]].forEach(([x1,y1,x2,y2]) => {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    });
 
-    // Body — horizontal oval, wider than tall (ratio ~1.6:1)
-    ctx.fillStyle = "#8B6B14";
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 18, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Belly — cream, front-bottom offset
-    ctx.fillStyle = "#F0E0B0";
-    ctx.beginPath();
-    ctx.ellipse(6, 5, 9, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Wing — swept-back teardrop, drawn on top, rotated around shoulder
+    // ── WING (behind body, swept back) ────────────────────────────────
     ctx.save();
-    ctx.translate(5, -2);
-    ctx.rotate((wingAngle * Math.PI) / 180);
-    ctx.fillStyle = "#5C4008";
+    // Pivot the wing from where it meets the body (roughly centre-back)
+    ctx.translate(-2, 2);
+    ctx.rotate(flapAngle);
+    ctx.fillStyle = "#7A5418";
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(-12, -2);
-    ctx.lineTo(-17, 3);
-    ctx.lineTo(-10, 6);
+    // Swept teardrop: forward edge short, trailing edge long and tapered
+    ctx.bezierCurveTo(-4, -9, -16, -11, -18, -6);
+    ctx.bezierCurveTo(-20, 0, -14, 10, 0, 8);
     ctx.closePath();
     ctx.fill();
-    // Feather detail strokes on trailing edge
-    ctx.strokeStyle = "#3D2D05";
+    // Feather detail lines on wing trailing edge
+    ctx.strokeStyle = "#5C3D0A";
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-10, 3);
-    ctx.lineTo(-15, 3);
-    ctx.moveTo(-8, 4);
-    ctx.lineTo(-13, 4);
-    ctx.moveTo(-6, 3);
-    ctx.lineTo(-10, 3);
-    ctx.stroke();
+    [[-10, 8, -18, 2], [-12, 5, -19, -2], [-10, 3, -16, -5]].forEach(([x1,y1,x2,y2]) => {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    });
     ctx.restore();
 
-    // Head — smaller circle at front-top (~40% of body width)
+    // ── BODY ──────────────────────────────────────────────────────────
+    // Wide horizontal oval — flight silhouette, not a sitting-bird blob
     ctx.fillStyle = "#8B6B14";
     ctx.beginPath();
-    ctx.arc(13, -6, 7, 0, Math.PI * 2);
+    ctx.ellipse(0, 2, 19, 11, -0.08, 0, Math.PI * 2);
     ctx.fill();
 
-    // Crest — 3 upward strokes from top of head
-    ctx.strokeStyle = "#5C4008";
+    // ── BELLY (cream underside) ────────────────────────────────────────
+    ctx.fillStyle = "#F0DFAA";
+    ctx.beginPath();
+    ctx.ellipse(3, 6, 11, 6.5, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── HEAD ──────────────────────────────────────────────────────────
+    // Smaller circle, offset to the front-top of the body
+    ctx.fillStyle = "#8B6B14";
+    ctx.beginPath();
+    ctx.arc(12, -5, 8.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Face patch — lighter area around eye
+    ctx.fillStyle = "#C49A3A";
+    ctx.beginPath();
+    ctx.ellipse(13, -4, 5.5, 4.5, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── HEAD CREST (Pidgey's most distinctive feature) ─────────────────
+    ctx.strokeStyle = "#4A2C08";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(10, -12);
-    ctx.lineTo(9, -18);
-    ctx.moveTo(12, -12);
-    ctx.lineTo(12, -19);
-    ctx.moveTo(14, -12);
-    ctx.lineTo(15, -17);
-    ctx.stroke();
+    // Three upward tufts of different heights from top of head
+    [[10, -12, 8,  -21],
+     [13, -13, 12, -23],
+     [16, -12, 16, -20]].forEach(([x1,y1,x2,y2]) => {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    });
 
-    // Eye — white circle, dark iris, highlight dot
-    ctx.fillStyle = "#fff";
+    // ── EYE ───────────────────────────────────────────────────────────
+    // White sclera
+    ctx.fillStyle = "#FFFFFF";
     ctx.beginPath();
-    ctx.arc(15, -7, 3.5, 0, Math.PI * 2);
+    ctx.arc(16, -6, 3.8, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#3B2A0A";
+    // Dark iris
+    ctx.fillStyle = "#1A0A00";
     ctx.beginPath();
-    ctx.arc(16, -7, 2, 0, Math.PI * 2);
+    ctx.arc(16.5, -6, 2.4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#fff";
+    // Highlight dot
+    ctx.fillStyle = "#FFFFFF";
     ctx.beginPath();
-    ctx.arc(16.5, -8, 0.8, 0, Math.PI * 2);
+    ctx.arc(17.5, -7, 0.9, 0, Math.PI * 2);
     ctx.fill();
 
-    // Beak — short forward-pointing triangle
-    ctx.fillStyle = "#D4882A";
+    // ── BEAK ──────────────────────────────────────────────────────────
+    // Short, stubby, forward-pointing — typical seed-eater beak
+    ctx.fillStyle = "#C8781A";
     ctx.beginPath();
-    ctx.moveTo(19, -5);
-    ctx.lineTo(24, -4);
-    ctx.lineTo(19, -3);
+    ctx.moveTo(20, -7);   // top base
+    ctx.lineTo(27, -5);   // tip
+    ctx.lineTo(20, -3);   // bottom base
     ctx.closePath();
     ctx.fill();
+    // Beak midline
+    ctx.strokeStyle = "#8B4A0A";
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(20, -5); ctx.lineTo(26, -5);
+    ctx.stroke();
 
     ctx.restore();
   }

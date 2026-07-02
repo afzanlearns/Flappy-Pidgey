@@ -106,6 +106,12 @@
     text-shadow:3px 3px 0 rgba(0,0,0,0.3), -1px -1px 0 rgba(0,0,0,0.3);
     line-height:1;
   }
+  #hud-best {
+    font-size:12px; color:rgba(255,255,255,0.7);
+    text-shadow:1px 1px 0 rgba(0,0,0,0.25);
+    line-height:1; letter-spacing:0.5px;
+  }
+
   .hud-dex-pill {
     background:rgba(255,255,255,0.85);
     border-radius:20px;
@@ -330,7 +336,10 @@
 
   <!-- ─── HUD ─────────────────────────────────────────────────────────── -->
   <div id="hud" class="hidden">
-    <div id="score-display">0</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;">
+      <div id="score-display">0</div>
+      <div id="hud-best">BEST 0</div>
+    </div>
     <button id="pause-button" class="hidden" style="font-family:var(--font);background:rgba(0,0,0,0.35);color:#fff;font-size:16px;padding:6px 14px;border:none;border-radius:20px;cursor:pointer;z-index:32;pointer-events:all;line-height:1;">⏸</button>
     <div class="hud-dex-pill"><svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:middle;margin-right:4px;"><circle cx="8" cy="8" r="7" fill="#f0f0f0" stroke="#222" stroke-width="1.2"/><path d="M1 8 A7 7 0 0 1 15 8" fill="#ee1515"/><rect x="1" y="7.3" width="14" height="1.4" fill="#222"/><circle cx="8" cy="8" r="2.2" fill="#eee" stroke="#666" stroke-width="0.8"/></svg> <span id="hud-dex-progress">0/302</span></div>
   </div>

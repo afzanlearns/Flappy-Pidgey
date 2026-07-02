@@ -828,8 +828,8 @@ class Game {
   }
 
   _updateHUD() {
-    const scoreEl = document.getElementById("score-display");
-    scoreEl.textContent = this.score;
+    document.getElementById("score-display").textContent = this.score;
+    document.getElementById("hud-best").textContent = `BEST ${this.save.bestScore}`;
     const progress = getDexProgress(this.save);
     document.getElementById("hud-dex-progress").textContent = `${progress.caught}/302`;
   }
